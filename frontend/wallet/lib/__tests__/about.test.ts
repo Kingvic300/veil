@@ -21,13 +21,28 @@ describe('getBuildId', () => {
   })
 })
 
+/**
+ * Strip the scheme and host, then require that nothing readable is left: either
+ * no path at all, or a fully masked one. The earlier form of this check pattern
+ * matched for "a slash followed by 4+ non-masked characters", which also matches
+ * the `//host` of every https URL — so it failed on the plain, path-less
+ * `https://soroban-testnet.stellar.org`. The host has to be removed before the
+ * check, not pattern-matched around.
+ */
+function pathIsHidden(value: string): boolean {
+  const rest = value.replace(/^https?:\/\/[^/]+/, '')
+  return rest === '' || rest === `/${'•'.repeat(8)}`
+}
+
 describe('getNetworkFacts', () => {
   it('never renders an RPC or Horizon URL with its path intact', () => {
     const facts = getNetworkFacts()
     const rpc = facts.find(f => f.key === 'rpc')!
     const horizon = facts.find(f => f.key === 'horizon')!
-    expect(rpc.value).not.toMatch(/\/[^/•]{4,}/)
-    expect(horizon.value).not.toMatch(/\/[^/•]{4,}/)
+    expect(pathIsHidden(rpc.value)).toBe(true)
+    expect(pathIsHidden(horizon.value)).toBe(true)
+    // Guard the guard: a keyed provider URL must not pass this check.
+    expect(pathIsHidden('https://green-provider.quiknode.pro/abc123secretpath/')).toBe(false)
   })
 
   it('includes the active network display name', () => {

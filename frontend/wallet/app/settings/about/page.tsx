@@ -16,14 +16,20 @@ import {
 
 export default function AboutPage() {
   const router = useRouter()
+  const [mounted, setMounted] = useState(false)
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
 
   useEffect(() => {
+    setMounted(true)
     setWalletAddress(walletSession.getItem('invisible_wallet_address'))
   }, [])
 
-  const networkFacts = getNetworkFacts()
-  const contractEntries = getContractEntries(walletAddress)
+  // The active network comes from localStorage, which the server cannot see, and
+  // mainnet's RPC URL resolves off `window.location.origin` — so rendering these
+  // facts before mount would emit different server and client HTML (and show a
+  // blank RPC row during SSR). Same reason `NetworkSwitcher` gates on mount.
+  const networkFacts = mounted ? getNetworkFacts() : []
+  const contractEntries = mounted ? getContractEntries(walletAddress) : []
 
   return (
     <div className="wallet-shell" style={{ padding: '1.5rem 1.25rem 4rem' }}>
