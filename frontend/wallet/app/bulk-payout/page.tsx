@@ -122,7 +122,7 @@ export default function BulkPayoutPage() {
     // after 30s. A hash existing is not the same as the payment having
     // happened — resending this row risks a double payment if it does land
     // later, so this must surface as a distinct outcome, not a success.
-    throw new Error('Not confirmed within 30s — check the explorer before resending this row.')
+    throw new Error(`Not confirmed within 30s (tx ${sendResult.hash}) — check the explorer before resending this row.`)
   }
 
   async function handleSignAndSubmit() {
