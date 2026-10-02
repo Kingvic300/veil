@@ -106,7 +106,7 @@ describe('parsePayoutCsv', () => {
   it('reports a malformed row by its row number instead of dropping it silently', () => {
     const csv = `recipient,amount,asset\nnot-an-address,5,XLM`
     const { rows, errors } = parsePayoutCsv(csv)
-    expect(rows).toHaveLength(0)
+    expect(rows).toHaveLength(1)
     expect(errors).toContainEqual(expect.objectContaining({ row: 1, field: 'recipient' }))
   })
 

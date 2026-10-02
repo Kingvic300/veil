@@ -8,10 +8,11 @@
  * explicit issuer field, and validates each row against it: address (StrKey,
  * accepting both G-accounts and C-contracts, matching single-send), asset
  * resolved by issuer, amount, and an optional memo under the same 28-byte
- * limit as a single send.
+ * limit as a single send. A CSV row can't express a memo type, so every memo
+ * here is validated as MEMO_TEXT — see the header comment in lib/memo.ts.
  */
 import { Asset, StrKey } from '@stellar/stellar-sdk'
-import { isMemoTextValid, MEMO_TEXT_MAX_BYTES } from './memo'
+import { validateMemoText } from './memo'
 
 export interface WebPayoutRow {
   recipient: string
@@ -51,12 +52,9 @@ export function validateRow(row: WebPayoutRow, rowNumber: number): RowError[] {
     errors.push({ row: rowNumber, field: 'asset', message: `Invalid issuer address: ${row.issuer}` })
   }
 
-  if (row.memo && !isMemoTextValid(row.memo)) {
-    errors.push({
-      row: rowNumber,
-      field: 'memo',
-      message: `Memo exceeds ${MEMO_TEXT_MAX_BYTES} bytes`,
-    })
+  const memoProblem = validateMemoText(row.memo)
+  if (memoProblem) {
+    errors.push({ row: rowNumber, field: 'memo', message: memoProblem })
   }
 
   return errors
@@ -80,8 +78,9 @@ export interface ParsedPayoutFile {
 
 /**
  * Parses a CSV with columns: recipient, amount, asset, issuer (optional for
- * XLM), memo (optional). Malformed or short rows are reported per row number
- * rather than silently skipped.
+ * XLM), memo (optional). Every parsed row is returned alongside its errors
+ * (if any), numbered by CSV line — the caller decides what to do with a row
+ * that failed validation rather than this function silently dropping it.
  */
 export function parsePayoutCsv(csvText: string): ParsedPayoutFile {
   const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0)
@@ -114,11 +113,8 @@ export function parsePayoutCsv(csvText: string): ParsedPayoutFile {
 
     const row: WebPayoutRow = { recipient, amount, assetCode, issuer, memo }
     const rowErrors = validateRow(row, rowNumber)
-    if (rowErrors.length > 0) {
-      errors.push(...rowErrors)
-    } else {
-      rows.push(row)
-    }
+    errors.push(...rowErrors)
+    rows.push(row)
   }
 
   return { rows, errors }

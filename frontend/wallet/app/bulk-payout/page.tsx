@@ -15,7 +15,6 @@ import { passkeyErrorMessage } from '@/lib/passkeyAuth'
 import { useInactivityLock } from '@/hooks/useInactivityLock'
 import {
   parsePayoutCsv,
-  validateRows,
   resolveAsset,
   totalsByAsset,
   type WebPayoutRow,
@@ -46,14 +45,9 @@ export default function BulkPayoutPage() {
 
   function handleParse() {
     const { rows: parsedRows, errors } = parsePayoutCsv(csvText)
-    // Re-validate even the rows the parser accepted, so a row that was well
-    // formed but semantically invalid (e.g. asset code with no issuer) is
-    // still caught before anything is shown as ready to sign.
-    const semanticErrors = validateRows(parsedRows)
-    const allErrors = [...errors, ...semanticErrors]
-    setParseErrors(allErrors)
-    setRows(allErrors.length === 0 ? parsedRows : [])
-    setStep(allErrors.length === 0 && parsedRows.length > 0 ? 'review' : 'input')
+    setParseErrors(errors)
+    setRows(errors.length === 0 ? parsedRows : [])
+    setStep(errors.length === 0 && parsedRows.length > 0 ? 'review' : 'input')
   }
 
   async function submitOneRow(row: WebPayoutRow): Promise<string> {
@@ -120,16 +114,21 @@ export default function BulkPayoutPage() {
         if (result.status !== SorobanRpc.Api.GetTransactionStatus.SUCCESS) {
           throw new Error(`Transaction failed: ${result.status}`)
         }
-        break
+        return sendResult.hash
       }
       await new Promise(r => setTimeout(r, 1_000))
     }
-    return sendResult.hash
+    // The RPC accepted the transaction but it still hadn't landed in a ledger
+    // after 30s. A hash existing is not the same as the payment having
+    // happened — resending this row risks a double payment if it does land
+    // later, so this must surface as a distinct outcome, not a success.
+    throw new Error('Not confirmed within 30s — check the explorer before resending this row.')
   }
 
   async function handleSignAndSubmit() {
     beginTx()
     setSigning(true)
+    setOutcomes([])
     setStep('signing')
     try {
       const keyId = walletLocal.getItem('invisible_wallet_key_id')
